@@ -1,0 +1,218 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Urbanist', system-ui, -apple-system, sans-serif;
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #03050d;
+    color: #f1f5f9;
+    letter-spacing: 0.01em;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-mono,
+  .tabular-nums {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Animated Futuristic Gradients & Glassmorphism */
+@keyframes nexusGradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes nexusPulseGlow {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes nexusOrbitRotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes nexusOrbitReverse {
+  0% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes nexusFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.nexus-animated-gradient-text {
+  background: linear-gradient(90deg, #c084fc 0%, #60a5fa 45%, #22d3ee 90%, #c084fc 100%);
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: nexusGradientShift 7s ease infinite;
+}
+
+.nexus-glass {
+  background: rgba(11, 16, 36, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.nexus-glass-card {
+  background: linear-gradient(160deg, rgba(14, 21, 47, 0.82) 0%, rgba(8, 12, 28, 0.9) 100%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  box-shadow: 0 12px 32px -12px rgba(2, 6, 23, 0.85);
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nexus-glass-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(56, 189, 248, 0.45);
+  box-shadow: 0 16px 40px -12px rgba(124, 58, 237, 0.28);
+}
+
+/* Interactive Button System with Real Visual Feedback */
+.nexus-btn-primary {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(95deg, #7c3aed 0%, #2563eb 52%, #06b6d4 100%);
+  background-size: 180% 180%;
+  color: #ffffff;
+  box-shadow: 0 6px 22px -4px rgba(124, 58, 237, 0.5);
+  transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 150ms ease;
+}
+
+.nexus-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px -4px rgba(6, 182, 212, 0.55);
+}
+
+.nexus-btn-primary:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+}
+
+.nexus-btn-primary:focus-visible {
+  outline: 2px solid #22d3ee;
+  outline-offset: 2px;
+}
+
+.nexus-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.nexus-btn-secondary {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  color: #e2e8f0;
+  transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.nexus-btn-secondary:hover:not(:disabled) {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: rgba(168, 85, 247, 0.5);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.nexus-btn-secondary:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+}
+
+.nexus-btn-secondary:focus-visible {
+  outline: 2px solid #a855f7;
+  outline-offset: 2px;
+}
+
+.nexus-orb-pulse {
+  animation: nexusPulseGlow 4.5s ease-in-out infinite;
+}
+
+.nexus-orbit-cw {
+  animation: nexusOrbitRotate 22s linear infinite;
+}
+
+.nexus-orbit-ccw {
+  animation: nexusOrbitReverse 28s linear infinite;
+}
+
+.nexus-float {
+  animation: nexusFloat 5s ease-in-out infinite;
+}
+
+/* Respect Reduced Motion Preferences & Low-Power Devices */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .nexus-glass-card:hover,
+  .nexus-btn-primary:hover:not(:disabled),
+  .nexus-btn-secondary:hover:not(:disabled) {
+    transform: none !important;
+  }
+}

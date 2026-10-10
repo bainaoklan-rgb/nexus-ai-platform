@@ -1,0 +1,6 @@
+{
+  "name": "NEXUS AI STUDIO",
+  "description": "Plataforma de inteligência artificial para criar roteiros, títulos, descrições, organizar projetos criativos e explorar ferramentas interativas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

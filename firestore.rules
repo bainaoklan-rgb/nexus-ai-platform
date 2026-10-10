@@ -1,0 +1,807 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Zero-read admin check for list operations (Cost-Optimization Clause)
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'bainaoklan@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Validation Blueprints
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'photoURL', 'role', 'planId', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'photoURL', 'role', 'planId', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+        && data.photoURL is string && data.photoURL.size() >= 0 && data.photoURL.size() <= 500
+        && data.role is string && data.role.size() <= 20 && (data.role == 'user' || data.role == 'admin')
+        && data.planId is string && data.planId.size() <= 20 && (data.planId == 'free' || data.planId == 'pro' || data.planId == 'studio')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email', 'phone', 'bio', 'niche', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'phone', 'bio', 'niche', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 150
+        && data.phone is string && data.phone.size() >= 0 && data.phone.size() <= 30
+        && data.bio is string && data.bio.size() >= 0 && data.bio.size() <= 500
+        && data.niche is string && data.niche.size() >= 0 && data.niche.size() <= 100
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'createdAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 150
+        && data.createdAt is timestamp;
+    }
+
+    function isValidSubscription(data) {
+      return data.keys().hasAll(['id', 'userId', 'planId', 'status', 'priceCents', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'planId', 'status', 'priceCents', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.planId is string && data.planId.size() <= 20 && (data.planId == 'free' || data.planId == 'pro' || data.planId == 'studio')
+        && data.status is string && data.status.size() <= 20 && (data.status == 'active' || data.status == 'pending' || data.status == 'cancelled' || data.status == 'expired')
+        && data.priceCents is int && data.priceCents >= 0 && data.priceCents <= 10000000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll(['id', 'title', 'description', 'priceCents', 'category', 'imageUrl', 'fileFormat', 'active', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'title', 'description', 'priceCents', 'category', 'imageUrl', 'fileFormat', 'active', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 120
+        && data.description is string && data.description.size() >= 5 && data.description.size() <= 1000
+        && data.priceCents is int && data.priceCents >= 0 && data.priceCents <= 10000000
+        && data.category is string && data.category.size() >= 2 && data.category.size() <= 50
+        && data.imageUrl is string && data.imageUrl.size() >= 1 && data.imageUrl.size() <= 500
+        && data.fileFormat is string && data.fileFormat.size() >= 1 && data.fileFormat.size() <= 60
+        && data.active is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['id', 'userId', 'itemType', 'itemId', 'itemTitle', 'amountCents', 'status', 'externalReference', 'pixCopyPaste', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'itemType', 'itemId', 'itemTitle', 'amountCents', 'status', 'externalReference', 'pixCopyPaste', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.itemType is string && data.itemType.size() <= 20 && (data.itemType == 'plan' || data.itemType == 'product')
+        && isValidId(data.itemId)
+        && data.itemTitle is string && data.itemTitle.size() >= 1 && data.itemTitle.size() <= 150
+        && data.amountCents is int && data.amountCents >= 0 && data.amountCents <= 10000000
+        && data.status is string && data.status.size() <= 30 && (
+          data.status == 'awaiting_payment' ||
+          data.status == 'pending_configuration' ||
+          data.status == 'pending_pix' ||
+          data.status == 'approved' ||
+          data.status == 'expired' ||
+          data.status == 'refunded' ||
+          data.status == 'cancelled'
+        )
+        && data.externalReference is string && data.externalReference.size() >= 1 && data.externalReference.size() <= 128
+        && data.pixCopyPaste is string && data.pixCopyPaste.size() >= 0 && data.pixCopyPaste.size() <= 1000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPayment(data) {
+      return data.keys().hasAll(['id', 'orderId', 'userId', 'amountCents', 'status', 'provider', 'transactionId', 'idempotencyKey', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'orderId', 'userId', 'amountCents', 'status', 'provider', 'transactionId', 'idempotencyKey', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.orderId)
+        && isValidId(data.userId)
+        && data.amountCents is int && data.amountCents >= 0 && data.amountCents <= 10000000
+        && data.status is string && data.status.size() <= 20 && (
+          data.status == 'pending' ||
+          data.status == 'approved' ||
+          data.status == 'expired' ||
+          data.status == 'refunded' ||
+          data.status == 'cancelled'
+        )
+        && data.provider is string && data.provider.size() >= 1 && data.provider.size() <= 50
+        && data.transactionId is string && data.transactionId.size() >= 1 && data.transactionId.size() <= 128
+        && data.idempotencyKey is string && data.idempotencyKey.size() >= 1 && data.idempotencyKey.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUsageHistory(data) {
+      return data.keys().hasAll(['id', 'userId', 'toolId', 'toolName', 'promptSummary', 'outputPreview', 'dateKey', 'createdAt'])
+        && data.keys().hasOnly(['id', 'userId', 'toolId', 'toolName', 'promptSummary', 'outputPreview', 'dateKey', 'createdAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && isValidId(data.toolId)
+        && data.toolName is string && data.toolName.size() >= 1 && data.toolName.size() <= 100
+        && data.promptSummary is string && data.promptSummary.size() >= 1 && data.promptSummary.size() <= 500
+        && data.outputPreview is string && data.outputPreview.size() >= 1 && data.outputPreview.size() <= 4000
+        && data.dateKey is string && data.dateKey.size() >= 8 && data.dateKey.size() <= 20
+        && data.createdAt is timestamp;
+    }
+
+    function isValidSavedProject(data) {
+      return data.keys().hasAll(['id', 'userId', 'title', 'category', 'toolId', 'content', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'title', 'category', 'toolId', 'content', 'status', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 150
+        && data.category is string && data.category.size() <= 30 && (
+          data.category == 'Texto' ||
+          data.category == 'Imagem' ||
+          data.category == 'Vídeo' ||
+          data.category == 'Produtividade'
+        )
+        && isValidId(data.toolId)
+        && data.content is string && data.content.size() >= 1 && data.content.size() <= 15000
+        && data.status is string && data.status.size() <= 20 && (
+          data.status == 'ideia' ||
+          data.status == 'roteiro' ||
+          data.status == 'gravacao' ||
+          data.status == 'edicao' ||
+          data.status == 'publicado'
+        )
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSupportTicket(data) {
+      return data.keys().hasAll(['id', 'userId', 'userEmail', 'subject', 'message', 'status', 'adminReply', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'userEmail', 'subject', 'message', 'status', 'adminReply', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 150
+        && data.subject is string && data.subject.size() >= 3 && data.subject.size() <= 150
+        && data.message is string && data.message.size() >= 5 && data.message.size() <= 2000
+        && data.status is string && data.status.size() <= 20 && (
+          data.status == 'open' ||
+          data.status == 'answered' ||
+          data.status == 'closed'
+        )
+        && data.adminReply is string && data.adminReply.size() >= 0 && data.adminReply.size() <= 2000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAppSettings(data) {
+      return data.keys().hasAll([
+          'id',
+          'freeDailyLimit',
+          'proDailyLimit',
+          'studioDailyLimit',
+          'proPriceCents',
+          'studioPriceCents',
+          'proPixLink',
+          'studioPixLink',
+          'pixKey',
+          'pixKeyType',
+          'pixHolderName',
+          'pixBankName',
+          'supportEmail',
+          'termsOfUse',
+          'privacyPolicy',
+          'cancellationPolicy',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'freeDailyLimit',
+          'proDailyLimit',
+          'studioDailyLimit',
+          'proPriceCents',
+          'studioPriceCents',
+          'proPixLink',
+          'studioPixLink',
+          'pixKey',
+          'pixKeyType',
+          'pixHolderName',
+          'pixBankName',
+          'supportEmail',
+          'termsOfUse',
+          'privacyPolicy',
+          'cancellationPolicy',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.freeDailyLimit is int && data.freeDailyLimit >= 1 && data.freeDailyLimit <= 1000
+        && data.proDailyLimit is int && data.proDailyLimit >= 1 && data.proDailyLimit <= 10000
+        && data.studioDailyLimit is int && data.studioDailyLimit >= 1 && data.studioDailyLimit <= 100000
+        && data.proPriceCents is int && data.proPriceCents >= 100 && data.proPriceCents <= 1000000
+        && data.studioPriceCents is int && data.studioPriceCents >= 100 && data.studioPriceCents <= 1000000
+        && data.proPixLink is string && data.proPixLink.size() >= 10 && data.proPixLink.size() <= 500
+        && data.studioPixLink is string && data.studioPixLink.size() >= 10 && data.studioPixLink.size() <= 500
+        && data.pixKey is string && data.pixKey.size() >= 0 && data.pixKey.size() <= 200
+        && data.pixKeyType is string && data.pixKeyType.size() >= 0 && data.pixKeyType.size() <= 40
+        && data.pixHolderName is string && data.pixHolderName.size() >= 0 && data.pixHolderName.size() <= 120
+        && data.pixBankName is string && data.pixBankName.size() >= 0 && data.pixBankName.size() <= 80
+        && data.supportEmail is string && data.supportEmail.size() >= 3 && data.supportEmail.size() <= 150
+        && data.termsOfUse is string && data.termsOfUse.size() >= 10 && data.termsOfUse.size() <= 10000
+        && data.privacyPolicy is string && data.privacyPolicy.size() >= 10 && data.privacyPolicy.size() <= 10000
+        && data.cancellationPolicy is string && data.cancellationPolicy.size() >= 10 && data.cancellationPolicy.size() <= 5000
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChatConversation(data) {
+      return data.keys().hasAll(['id', 'userId', 'title', 'lastMessagePreview', 'messageCount', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'userId', 'title', 'lastMessagePreview', 'messageCount', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.lastMessagePreview is string && data.lastMessagePreview.size() >= 0 && data.lastMessagePreview.size() <= 300
+        && data.messageCount is int && data.messageCount >= 0 && data.messageCount <= 10000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['id', 'conversationId', 'userId', 'role', 'content', 'createdAt'])
+        && data.keys().hasOnly(['id', 'conversationId', 'userId', 'role', 'content', 'createdAt'])
+        && isValidId(data.id)
+        && isValidId(data.conversationId)
+        && isValidId(data.userId)
+        && data.role is string && data.role.size() <= 20 && (data.role == 'user' || data.role == 'assistant')
+        && data.content is string && data.content.size() >= 1 && data.content.size() <= 15000
+        && data.createdAt is timestamp;
+    }
+
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll([
+          'id',
+          'title',
+          'message',
+          'category',
+          'status',
+          'targetAudience',
+          'authorUid',
+          'authorEmail',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'title',
+          'message',
+          'category',
+          'status',
+          'targetAudience',
+          'authorUid',
+          'authorEmail',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.title is string && data.title.size() >= 3 && data.title.size() <= 150
+        && data.message is string && data.message.size() >= 5 && data.message.size() <= 4000
+        && data.category is string && data.category.size() <= 30 && (
+          data.category == 'nova_ferramenta' ||
+          data.category == 'melhoria' ||
+          data.category == 'manutencao' ||
+          data.category == 'recurso' ||
+          data.category == 'plano'
+        )
+        && data.status is string && data.status.size() <= 20 && (
+          data.status == 'draft' ||
+          data.status == 'published' ||
+          data.status == 'archived'
+        )
+        && data.targetAudience is string && data.targetAudience.size() <= 20 && (
+          data.targetAudience == 'all' ||
+          data.targetAudience == 'free' ||
+          data.targetAudience == 'pro' ||
+          data.targetAudience == 'studio'
+        )
+        && isValidId(data.authorUid)
+        && data.authorEmail is string && data.authorEmail.size() >= 3 && data.authorEmail.size() <= 150
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserNotification(data) {
+      return data.keys().hasAll([
+          'id',
+          'userId',
+          'eventKey',
+          'title',
+          'message',
+          'category',
+          'read',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'userId',
+          'eventKey',
+          'title',
+          'message',
+          'category',
+          'read',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && isValidId(data.eventKey)
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 150
+        && data.message is string && data.message.size() >= 2 && data.message.size() <= 2000
+        && data.category is string && data.category.size() <= 30 && (
+          data.category == 'nova_ferramenta' ||
+          data.category == 'melhoria' ||
+          data.category == 'manutencao' ||
+          data.category == 'plano' ||
+          data.category == 'pedido'
+        )
+        && data.read is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNotificationRead(data) {
+      return data.keys().hasAll(['id', 'userId', 'announcementId', 'createdAt'])
+        && data.keys().hasOnly(['id', 'userId', 'announcementId', 'createdAt'])
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && isValidId(data.announcementId)
+        && data.createdAt is timestamp;
+    }
+
+    // 1. /users/{userId}
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isSignedIn() && (existing().uid == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && incoming().uid == userId
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (incoming().role == 'user' && incoming().planId == 'free') ||
+          isAdmin()
+        );
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwner(userId)
+            && incoming().role == existing().role
+            && incoming().planId == existing().planId
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt'])
+          )
+        );
+      allow delete: if isVerifiedUser() && isValidId(userId) && (isOwner(userId) || isAdmin());
+    }
+
+    // 2. /user_profiles/{userId} (PII Isolated)
+    match /user_profiles/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isSignedIn() && (existing().uid == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == userId
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && userExists();
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwner(userId)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['phone', 'bio', 'niche', 'updatedAt'])
+          )
+        );
+      allow delete: if isVerifiedUser() && isValidId(userId) && (isOwner(userId) || isAdmin());
+    }
+
+    // 3. /admins/{adminId}
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isAdmin()
+        && isValidId(adminId)
+        && isValidAdminRecord(incoming())
+        && incoming().uid == adminId
+        && incoming().createdAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(adminId)
+        && isValidAdminRecord(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(adminId);
+    }
+
+    // 4. /subscriptions/{subscriptionId}
+    match /subscriptions/{subscriptionId} {
+      allow get: if isSignedIn() && isValidId(subscriptionId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isAdmin()
+        && isValidId(subscriptionId)
+        && isValidSubscription(incoming())
+        && incoming().id == subscriptionId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(subscriptionId)
+        && isValidSubscription(incoming())
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(subscriptionId);
+    }
+
+    // 5. /products/{productId}
+    match /products/{productId} {
+      allow get: if isValidId(productId) && (existing().active == true || isAdmin());
+      allow list: if existing().active == true || isBootstrappedAdmin();
+      allow create: if isAdmin()
+        && isValidId(productId)
+        && isValidProduct(incoming())
+        && incoming().id == productId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(productId)
+        && isValidProduct(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(productId);
+    }
+
+    // 6. /orders/{orderId}
+    match /orders/{orderId} {
+      allow get: if isSignedIn() && isValidId(orderId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(orderId)
+        && isValidOrder(incoming())
+        && incoming().id == orderId
+        && incoming().userId == request.auth.uid
+        && (
+          incoming().status == 'awaiting_payment' ||
+          incoming().status == 'pending_configuration' ||
+          incoming().status == 'pending_pix'
+        )
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && userExists();
+      allow update: if isVerifiedUser()
+        && isValidId(orderId)
+        && isValidOrder(incoming())
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            existing().userId == request.auth.uid
+            && existing().status != 'approved'
+            && existing().status != 'refunded'
+            && existing().status != 'cancelled'
+            && incoming().status == 'cancelled'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(orderId);
+    }
+
+    // 7. /payments/{paymentId}
+    match /payments/{paymentId} {
+      allow get: if isSignedIn() && isValidId(paymentId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isAdmin()
+        && isValidId(paymentId)
+        && isValidPayment(incoming())
+        && incoming().id == paymentId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(paymentId)
+        && isValidPayment(incoming())
+        && incoming().id == existing().id
+        && incoming().orderId == existing().orderId
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(paymentId);
+    }
+
+    // 8. /usage_history/{usageId}
+    match /usage_history/{usageId} {
+      allow get: if isSignedIn() && isValidId(usageId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(usageId)
+        && isValidUsageHistory(incoming())
+        && incoming().id == usageId
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time
+        && userExists();
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(usageId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // 9. /saved_projects/{projectId}
+    match /saved_projects/{projectId} {
+      allow get: if isSignedIn() && isValidId(projectId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(projectId)
+        && isValidSavedProject(incoming())
+        && incoming().id == projectId
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && userExists();
+      allow update: if isVerifiedUser()
+        && isValidId(projectId)
+        && isValidSavedProject(incoming())
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            existing().userId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'content', 'status', 'updatedAt'])
+          )
+        );
+      allow delete: if isVerifiedUser() && isValidId(projectId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // 10. /support_tickets/{ticketId}
+    match /support_tickets/{ticketId} {
+      allow get: if isSignedIn() && isValidId(ticketId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(ticketId)
+        && isValidSupportTicket(incoming())
+        && incoming().id == ticketId
+        && incoming().userId == request.auth.uid
+        && incoming().status == 'open'
+        && incoming().adminReply == ''
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && userExists();
+      allow update: if isVerifiedUser()
+        && isValidId(ticketId)
+        && isValidSupportTicket(incoming())
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            existing().userId == request.auth.uid
+            && existing().status != 'closed'
+            && incoming().adminReply == existing().adminReply
+            && incoming().diff(existing()).affectedKeys().hasOnly(['message', 'status', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(ticketId);
+    }
+
+    // 11. /app_settings/{settingId}
+    match /app_settings/{settingId} {
+      allow get: if isValidId(settingId);
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(settingId)
+        && isValidAppSettings(incoming())
+        && incoming().id == settingId
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            settingId == 'global'
+            && !exists(/databases/$(database)/documents/app_settings/global)
+            && incoming().freeDailyLimit == 5
+            && incoming().proDailyLimit == 100
+            && incoming().studioDailyLimit == 500
+            && incoming().proPriceCents == 1990
+            && incoming().studioPriceCents == 3990
+            && incoming().proPixLink == 'https://nubank.com.br/cobrar/90ldd3/6ac97ae0-2ce1-4d8f-a685-c673c40677f5'
+            && incoming().studioPixLink == 'https://nubank.com.br/cobrar/90ldd3/6ac97b26-1c25-48d6-b267-b7a4d750f7fb'
+          )
+        );
+      allow update: if isAdmin()
+        && isValidId(settingId)
+        && isValidAppSettings(incoming())
+        && incoming().id == existing().id
+        && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(settingId);
+    }
+
+    // 12. /chat_conversations/{conversationId}
+    match /chat_conversations/{conversationId} {
+      allow get: if isSignedIn() && isValidId(conversationId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(conversationId)
+        && isValidChatConversation(incoming())
+        && incoming().id == conversationId
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && userExists();
+      allow update: if isVerifiedUser()
+        && isValidId(conversationId)
+        && isValidChatConversation(incoming())
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            existing().userId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'lastMessagePreview', 'messageCount', 'updatedAt'])
+          )
+        );
+      allow delete: if isVerifiedUser() && isValidId(conversationId) && (existing().userId == request.auth.uid || isAdmin());
+
+      // 12b. /chat_conversations/{conversationId}/messages/{messageId} (Master Gate Subcollection)
+      match /messages/{messageId} {
+        allow get: if isSignedIn()
+          && isValidId(conversationId)
+          && isValidId(messageId)
+          && (
+            (
+              exists(/databases/$(database)/documents/chat_conversations/$(conversationId))
+              && get(/databases/$(database)/documents/chat_conversations/$(conversationId)).data.userId == request.auth.uid
+            )
+            || isAdmin()
+          );
+        allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+        allow create: if isVerifiedUser()
+          && isValidId(conversationId)
+          && isValidId(messageId)
+          && isValidChatMessage(incoming())
+          && incoming().id == messageId
+          && incoming().conversationId == conversationId
+          && incoming().userId == request.auth.uid
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/chat_conversations/$(conversationId))
+          && get(/databases/$(database)/documents/chat_conversations/$(conversationId)).data.userId == request.auth.uid;
+        allow update: if false;
+        allow delete: if isVerifiedUser()
+          && isValidId(conversationId)
+          && isValidId(messageId)
+          && (
+            (
+              exists(/databases/$(database)/documents/chat_conversations/$(conversationId))
+              && get(/databases/$(database)/documents/chat_conversations/$(conversationId)).data.userId == request.auth.uid
+            )
+            || isAdmin()
+          );
+      }
+    }
+
+    // 13. /announcements/{announcementId}
+    match /announcements/{announcementId} {
+      allow get: if isSignedIn() && isValidId(announcementId) && (existing().status == 'published' || isAdmin());
+      allow list: if isSignedIn() && (existing().status == 'published' || isBootstrappedAdmin());
+      allow create: if isAdmin()
+        && isValidId(announcementId)
+        && isValidAnnouncement(incoming())
+        && incoming().id == announcementId
+        && incoming().authorUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(announcementId)
+        && isValidAnnouncement(incoming())
+        && incoming().id == existing().id
+        && incoming().authorUid == existing().authorUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(announcementId);
+    }
+
+    // 14. /user_notifications/{notificationId}
+    match /user_notifications/{notificationId} {
+      allow get: if isSignedIn() && isValidId(notificationId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(notificationId)
+        && isValidUserNotification(incoming())
+        && incoming().id == notificationId
+        && (incoming().userId == request.auth.uid || isAdmin())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(notificationId)
+        && isValidUserNotification(incoming())
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().eventKey == existing().eventKey
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            existing().userId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['read', 'updatedAt'])
+          )
+        );
+      allow delete: if isVerifiedUser() && isValidId(notificationId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // 15. /notification_reads/{readId}
+    match /notification_reads/{readId} {
+      allow get: if isSignedIn() && isValidId(readId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(readId)
+        && isValidNotificationRead(incoming())
+        && incoming().id == readId
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time
+        && userExists();
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(readId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+  }
+}

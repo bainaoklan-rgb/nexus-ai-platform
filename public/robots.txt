@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Allow: /ferramentas
+Allow: /nexus-lab
+Allow: /planos
+Allow: /produtos
+Disallow: /admin
+Disallow: /painel
+Disallow: /projetos
+Disallow: /conversa
+Disallow: /notificacoes
+Disallow: /checkout
+Disallow: /api/
+
+Sitemap: https://ais-pre-ymgwovy2ap2cish26msfkk-253742165772.us-east1.run.app/sitemap.xml
